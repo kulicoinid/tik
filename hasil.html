@@ -91,7 +91,7 @@
     // Pastikan hanya guru yang bisa mengakses halaman ini
     if (sessionStorage.getItem('role') !== 'guru') {
         alert('Akses ditolak. Silakan login sebagai guru.');
-        window.location.href = 'login.html';
+        window.location.href = 'index.html';
     }
 
     // Ambil data dari localStorage
@@ -100,7 +100,7 @@
     // Fungsi untuk Logout
     function logout() {
         sessionStorage.removeItem('role');
-        window.location.href = 'login.html';
+        window.location.href = 'index.html';
     }
     
     // Tampilkan Data Tabel

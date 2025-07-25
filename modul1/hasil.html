@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hasil Asesmen - Dasbor Guru</title>
+    <title>Hasil Asesmen - Dashboard Guru</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @media print {
@@ -15,8 +15,11 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; }
         .container { max-width: 1200px; margin: 20px auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1, h2 { color: #0056b3; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        #controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; color: white; transition: background-color 0.3s; }
+        #controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+        #controls h1 { width: 100%; margin-bottom: 15px; }
+        .control-buttons { display: flex; gap: 10px; align-items: center; }
+        select, button { padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; }
+        button { cursor: pointer; color: white; transition: background-color 0.3s; border: none; }
         #btnLogout { background-color: #dc3545; }
         #btnLogout:hover { background-color: #c82333; }
         #btnPrint { background-color: #007bff; }
@@ -48,8 +51,19 @@
 
 <div class="container" id="print-area">
     <div id="controls" class="no-print">
-        <h1>Dasbor Guru</h1>
-        <div>
+        <h1>Dashboard Guru</h1>
+        <div class="control-buttons">
+            <label for="filterKelas"><strong>Filter Kelas:</strong></label>
+            <select id="filterKelas" onchange="updateTampilan()">
+                <option value="semua">Semua Kelas</option>
+                <option value="X TKPI">X TKPI</option>
+                <option value="X NKPI A">X NKPI A</option>
+                <option value="X NKPI B">X NKPI B</option>
+                <option value="X TSM A">X TSM A</option>
+                <option value="X TSM B">X TSM B</option>
+                <option value="X APAT A">X APAT A</option>
+                <option value="X APAT B">X APAT B</option>
+            </select>
             <button id="btnPrint" onclick="window.print()">Cetak Laporan</button>
             <button id="btnLogout" onclick="logout()">Logout</button>
         </div>
@@ -59,7 +73,7 @@
     <table id="hasilTable">
         <thead>
             <tr>
-                <th>Nama Siswa</th>
+                <th>Nama Siswa (A-Z)</th>
                 <th>Kelas</th>
                 <th>Nilai Pilihan Ganda (/3)</th>
                 <th>Jawaban Isian</th>
@@ -95,34 +109,135 @@
     }
 
     // Ambil data dari localStorage
-    const db = JSON.parse(localStorage.getItem('hasilKuisSiswa'));
+    const db = JSON.parse(localStorage.getItem('hasilKuisSiswa')) || [];
+    let activeCharts = []; // Untuk menyimpan instance chart agar bisa dihancurkan
 
     // Fungsi untuk Logout
     function logout() {
         sessionStorage.removeItem('role');
         window.location.href = 'index.html';
     }
-    
-    // Tampilkan Data Tabel
-    const tableBody = document.getElementById('hasilTableBody');
-    if (db.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Belum ada siswa yang mengerjakan.</td></tr>`;
-    } else {
-        db.forEach(siswa => {
-            const row = `
-                <tr>
-                    <td>${siswa.nama}</td>
-                    <td>${siswa.kelas}</td>
-                    <td>${siswa.nilaiPG}</td>
-                    <td><button class="btn-aksi no-print" onclick="showIsian(${siswa.id})">Lihat Jawaban</button></td>
-                    <td class="no-print"><button class="btn-aksi" onclick="showIsian(${siswa.id}, true)">Cetak</button></td>
-                </tr>
-            `;
-            tableBody.innerHTML += row;
+
+    // Fungsi utama untuk memperbarui tampilan (tabel dan grafik)
+    function updateTampilan() {
+        const filterKelas = document.getElementById('filterKelas').value;
+        
+        // 1. Filter data berdasarkan kelas yang dipilih
+        const filteredData = db.filter(siswa => {
+            return filterKelas === 'semua' || siswa.kelas === filterKelas;
+        });
+
+        // 2. Urutkan data berdasarkan nama siswa (A-Z)
+        filteredData.sort((a, b) => a.nama.localeCompare(b.nama));
+
+        // 3. Render ulang tabel dan grafik dengan data yang sudah difilter dan diurutkan
+        renderTabel(filteredData);
+        renderGrafik(filteredData);
+    }
+
+    // Fungsi untuk merender tabel
+    function renderTabel(data) {
+        const tableBody = document.getElementById('hasilTableBody');
+        tableBody.innerHTML = ''; // Kosongkan tabel sebelum diisi ulang
+
+        if (data.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Tidak ada data untuk ditampilkan.</td></tr>`;
+        } else {
+            data.forEach(siswa => {
+                const row = `
+                    <tr>
+                        <td>${siswa.nama}</td>
+                        <td>${siswa.kelas}</td>
+                        <td>${siswa.nilaiPG}</td>
+                        <td><button class="btn-aksi no-print" onclick="showIsian(${siswa.id})">Lihat Jawaban</button></td>
+                        <td class="no-print"><button class="btn-aksi" onclick="showIsian(${siswa.id}, true)">Cetak</button></td>
+                    </tr>
+                `;
+                tableBody.innerHTML += row;
+            });
+        }
+    }
+
+    // Fungsi untuk merender grafik
+    function renderGrafik(data) {
+        // Hancurkan chart sebelumnya untuk mencegah duplikasi
+        activeCharts.forEach(chart => chart.destroy());
+        activeCharts = [];
+
+        const chartContainer = document.getElementById('likertCharts');
+        chartContainer.innerHTML = ''; // Kosongkan kontainer grafik
+
+        if (data.length === 0) {
+            chartContainer.innerHTML = `<p style="text-align:center; grid-column: 1 / -1;">Pilih kelas untuk melihat analisis grafik.</p>`;
+            return;
+        }
+
+        const likertQuestions = [
+            "1. Saya senang menyelesaikan masalah atau tantangan yang rumit.",
+            "2. Saya pernah membuat langkah-langkah sistematis dalam menyelesaikan tugas.",
+            "3. Saya merasa teknologi bisa membantu menyelesaikan banyak permasalahan.",
+            "4. Saya mampu bekerja sama dengan teman untuk menyelesaikan masalah.",
+            "5. Saya memahami bagaimana teknologi seperti komputer bekerja menyelesaikan masalah."
+        ];
+        
+        const likertAnalysis = {};
+        likertQuestions.forEach((_, index) => {
+            likertAnalysis[`likert${index + 1}`] = { 'SS': 0, 'S': 0, 'TS': 0, 'STS': 0 };
+        });
+
+        data.forEach(siswa => {
+            for (const key in siswa.jawabanLikert) {
+                const answer = siswa.jawabanLikert[key];
+                if (likertAnalysis[key]) {
+                    likertAnalysis[key][answer]++;
+                }
+            }
+        });
+
+        Object.keys(likertAnalysis).forEach((key, index) => {
+            const chartData = likertAnalysis[key];
+            const totalResponses = Object.values(chartData).reduce((a, b) => a + b, 0);
+
+            const chartBox = document.createElement('div');
+            chartBox.className = 'chart-box';
+            chartBox.innerHTML = `<h3>${likertQuestions[index]}</h3><canvas id="chart-${key}"></canvas>`;
+            chartContainer.appendChild(chartBox);
+
+            const newChart = new Chart(document.getElementById(`chart-${key}`), {
+                type: 'pie',
+                data: {
+                    labels: ['Sangat Setuju (SS)', 'Setuju (S)', 'Tidak Setuju (TS)', 'Sangat Tidak Setuju (STS)'],
+                    datasets: [{
+                        data: Object.values(chartData),
+                        backgroundColor: ['#28a745', '#007bff', '#ffc107', '#dc3545'],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    const count = context.raw;
+                                    const percentage = totalResponses > 0 ? ((count / totalResponses) * 100).toFixed(1) : 0;
+                                    label += `${count} suara (${percentage}%)`;
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            activeCharts.push(newChart);
         });
     }
 
-    // Fungsi untuk Modal Jawaban Isian
+    // --- Fungsi Modal (tidak berubah) ---
     const modal = document.getElementById('isianModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalBody = document.getElementById('modalBody');
@@ -136,7 +251,7 @@
             <h3>Jawaban Isian</h3>
             <p><strong>1. Pengalaman menyelesaikan masalah sulit:</strong><br>${siswa.jawabanIsian.isian1}</p>
             <p><strong>2. Harapan dalam pembelajaran:</strong><br>${siswa.jawabanIsian.isian2}</p>
-            <p><strong>3. Cara menyelesaikan masalah kompleks:</strong><br>${siswa.jawabanIsian.isian3}</p>
+            <p><strong>3. Bagaimana kamu biasanya menyelesaikan masalah kompleks:</strong><br>${siswa.jawabanIsian.isian3}</p>
         `;
         modal.style.display = 'block';
         if (cetakLangsung) {
@@ -157,91 +272,15 @@
         document.body.innerHTML = printContent;
         window.print();
         document.body.innerHTML = originalContent;
-        // Re-initialize event listeners and dynamic content after printing
-        window.location.reload(); 
+        updateTampilan(); // Panggil ulang untuk mengembalikan tampilan seperti semula
     }
 
-    // Analisis dan Tampilkan Grafik Pie
-    const likertQuestions = [
-        "1. Saya senang menyelesaikan masalah atau tantangan yang rumit.",
-        "2. Saya pernah membuat langkah-langkah sistematis dalam menyelesaikan tugas.",
-        "3. Saya merasa teknologi bisa membantu menyelesaikan banyak permasalahan.",
-        "4. Saya mampu bekerja sama dengan teman untuk menyelesaikan masalah.",
-        "5. Saya memahami bagaimana teknologi seperti komputer bekerja menyelesaikan masalah."
-    ];
-    
-    const likertAnalysis = {};
-    likertQuestions.forEach((_, index) => {
-        likertAnalysis[`likert${index + 1}`] = { 'SS': 0, 'S': 0, 'TS': 0, 'STS': 0 };
+    // Panggil fungsi updateTampilan() saat halaman pertama kali dimuat
+    document.addEventListener('DOMContentLoaded', () => {
+        updateTampilan();
     });
-
-    if (db.length > 0) {
-        db.forEach(siswa => {
-            for (const key in siswa.jawabanLikert) {
-                const answer = siswa.jawabanLikert[key];
-                if (likertAnalysis[key]) {
-                    likertAnalysis[key][answer]++;
-                }
-            }
-        });
-
-        const chartContainer = document.getElementById('likertCharts');
-        Object.keys(likertAnalysis).forEach((key, index) => {
-            const data = likertAnalysis[key];
-            const totalResponses = Object.values(data).reduce((a, b) => a + b, 0);
-
-            const percentages = {
-                SS: totalResponses > 0 ? ((data.SS / totalResponses) * 100).toFixed(1) : 0,
-                S:  totalResponses > 0 ? ((data.S / totalResponses) * 100).toFixed(1) : 0,
-                TS: totalResponses > 0 ? ((data.TS / totalResponses) * 100).toFixed(1) : 0,
-                STS:totalResponses > 0 ? ((data.STS / totalResponses) * 100).toFixed(1) : 0,
-            };
-
-            const chartBox = document.createElement('div');
-            chartBox.className = 'chart-box';
-            chartBox.innerHTML = `<h3>${likertQuestions[index]}</h3><canvas id="chart-${key}"></canvas>`;
-            chartContainer.appendChild(chartBox);
-
-            new Chart(document.getElementById(`chart-${key}`), {
-                type: 'pie',
-                data: {
-                    labels: [
-                        `SS (${percentages.SS}%)`, 
-                        `S (${percentages.S}%)`, 
-                        `TS (${percentages.TS}%)`, 
-                        `STS (${percentages.STS}%)`
-                    ],
-                    datasets: [{
-                        data: Object.values(data),
-                        backgroundColor: ['#28a745', '#007bff', '#ffc107', '#dc3545'],
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'top' },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    label += context.raw + ' suara';
-                                    return label;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        });
-    } else {
-         document.getElementById('likertCharts').innerHTML = `<p style="text-align:center; grid-column: 1 / -1;">Belum ada data untuk ditampilkan pada grafik.</p>`;
-    }
 
 </script>
 
 </body>
 </html>
-
